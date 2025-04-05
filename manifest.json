@@ -1,0 +1,14 @@
+{
+    "manifest_version": 3,
+    "name": "Tab Close",
+    "version": "1.0",
+    "description": "Automatically closes inactive tabs after a set time.",
+    "permissions": ["tabs", "alarms", "storage"],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Tab Close"
+    }
+}
