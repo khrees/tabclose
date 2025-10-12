@@ -5,20 +5,102 @@
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
-        <h1>Settings</h1>
-        <div class="setting-item">
-            <label for="inactivity-limit">Close tabs after (minutes)</label>
-            <input type="number" id="inactivity-limit" class="inactivity-input" min="1" />
+        <div class="header">
+            <div class="header-left">
+                <img src="favicon_io/logo.svg" alt="TabClose" class="header-logo">
+                <h1>TabClose</h1>
+            </div>
+            <a href="welcome.html" target="_blank" class="info-link">About</a>
         </div>
 
-       
-        <h2>Excluded Domains</h2>
-        <ul id="domain-list"></ul>
-
-        <div class="input-group">
-            <input type="text" id="new-domain" placeholder="e.g. google.com" />
-            <button id="add-domain">Add</button>
+        <div class="section">
+            <div class="toggle-container">
+                <span class="toggle-label">TabClose is <span id="status-text">ON</span></span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="global-enabled" checked />
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
         </div>
+
+        <!-- View Mode (Saved Settings Display) -->
+        <div id="view-mode">
+            <div class="section">
+                <div class="view-header">
+                    <h2>Current Settings</h2>
+                    <button id="edit-btn" class="secondary-button">Edit Settings</button>
+                </div>
+
+                <div class="view-item">
+                    <span class="view-label">Mode:</span>
+                    <span id="view-mode-text" class="view-value">Inactivity Timer</span>
+                </div>
+
+                <div class="view-item" id="view-inactivity-item">
+                    <span class="view-label">Inactivity Timer:</span>
+                    <span id="view-inactivity-text" class="view-value">360 minutes</span>
+                </div>
+
+                <div class="view-item" id="view-scheduled-item" style="display: none;">
+                    <span class="view-label">Scheduled Time:</span>
+                    <span id="view-scheduled-text" class="view-value">23:00</span>
+                </div>
+
+                <div class="view-item">
+                    <span class="view-label">Excluded Domains:</span>
+                    <span id="view-domains-text" class="view-value">6 domains</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Mode (Settings Form) -->
+        <div id="edit-mode" style="display: none;">
+            <div class="section">
+                <h2>Close Mode</h2>
+                <p class="helper-text">Choose when to close inactive tabs</p>
+
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="inactivity">Inactivity Timer</button>
+                    <button class="tab-button" data-tab="scheduled">Scheduled</button>
+                </div>
+
+                <div class="tab-content active" id="inactivity-tab">
+                    <div class="setting-item">
+                        <label for="inactivity-limit">Close tabs inactive for</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="inactivity-limit" min="1" />
+                            <span class="unit">minutes</span>
+                        </div>
+                        <p class="helper-text">Continuously monitors and closes tabs after this period</p>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="scheduled-tab">
+                    <div class="setting-item">
+                        <label for="scheduled-time">Close all inactive tabs daily at</label>
+                        <input type="time" id="scheduled-time" />
+                        <p class="helper-text">Runs once per day at the specified time</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Excluded Domains</h2>
+                <p class="helper-text">Tabs from these domains will never be closed</p>
+                <ul id="domain-list"></ul>
+
+                <div class="input-group">
+                    <input type="text" id="new-domain" placeholder="e.g. google.com or mail.google.com" />
+                    <button id="add-domain">Add</button>
+                </div>
+            </div>
+
+            <div class="section action-section">
+                <button id="save-btn" class="primary-button">Save Settings</button>
+                <button id="cancel-btn" class="secondary-button">Cancel</button>
+            </div>
+        </div>
+
         <script src="popup.js"></script>
     </body>
 </html>
