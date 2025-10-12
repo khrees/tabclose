@@ -1,31 +1,85 @@
 body {
-    font-family: sans-serif;
-    padding: 10px;
-    width: 250px;
+    background-color: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    width: 320px;
+    margin: 0;
+    padding: 16px;
+    border: 1px solid #333;
 }
 
-h1 {
+h1, h2 {
     font-size: 16px;
+    font-weight: 500;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
+}
+
+.input-group {
+    display: flex;
+    margin-bottom: 16px;
+}
+
+input[type="text"], input[type="number"] {
+    background-color: #111;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    flex-grow: 1;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: #fff;
+}
+
+button {
+    background-color: #fff;
+    color: #000;
+    border: 1px solid #fff;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+button:hover {
+    background-color: #000;
+    color: #fff;
 }
 
 ul {
-    list-style: none;
+    list-style-type: none;
     padding: 0;
+    margin: 0;
+    max-height: 150px;
+    overflow-y: auto;
 }
 
 li {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 5px;
+    align-items: center;
+    padding: 8px 4px;
+    border-bottom: 1px solid #333;
 }
 
-input {
-    width: 160px;
-    padding: 4px;
+li:last-child {
+    border-bottom: none;
 }
 
-button {
-    padding: 4px;
-    margin-left: 5px;
-    cursor: pointer;
+li span {
+    flex-grow: 1;
+}
+
+.setting-item, .inactivity-input {
+    margin: 8px 0;
 }
