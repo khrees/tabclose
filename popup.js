@@ -25,7 +25,15 @@ function showViewMode() {
 }
 
 function showEditMode() {
-    // Store current settings for cancel
+    // Seed originalSettings from current UI so cancelEdit is safe even if
+    // the async storage read hasn't completed yet. The callback refines it.
+    originalSettings = {
+        closeMode: document.querySelector(".tab-button.active")?.dataset.tab === "scheduled" ? "scheduled" : "inactivity",
+        inactivityLimit: parseInt(inactivityLimitInput.value, 10) || 360,
+        scheduledCleanupTime: scheduledTimeInput.value || "21:00",
+        excludedDomains: []
+    };
+
     chrome.storage.local.get([
         "closeMode",
         "inactivityLimit",
@@ -97,7 +105,9 @@ function switchTab(targetTab, skipSave = false) {
 
 tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
-        switchTab(btn.dataset.tab);
+        // skipSave = true: clicking tabs in edit mode changes the UI only.
+        // The new close mode is persisted when "Save Settings" is clicked.
+        switchTab(btn.dataset.tab, true);
     });
 });
 
@@ -130,6 +140,13 @@ function saveSettings() {
 }
 
 function cancelEdit() {
+    if (!originalSettings.closeMode) {
+        // originalSettings hasn't loaded from storage yet — just bail
+        loadSettings();
+        showViewMode();
+        return;
+    }
+
     // Restore original settings
     chrome.storage.local.set(originalSettings, () => {
         // Reload form with original values
@@ -141,6 +158,9 @@ function cancelEdit() {
 editBtn.addEventListener("click", showEditMode);
 saveBtn.addEventListener("click", saveSettings);
 cancelBtn.addEventListener("click", cancelEdit);
+document.getElementById("close-now-btn")?.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "closeNow" });
+});
 
 // --- Excluded Domains --- //
 
@@ -252,7 +272,7 @@ function updateViewDisplay() {
     ], (data) => {
         const closeMode = data.closeMode || "inactivity";
         const inactivityLimit = data.inactivityLimit || 360;
-        const scheduledTime = data.scheduledCleanupTime || "23:00";
+        const scheduledTime = data.scheduledCleanupTime || "21:00";
         const domains = data.excludedDomains || [];
 
         // Update mode display
@@ -321,7 +341,7 @@ function loadSettings() {
 
         // Settings values
         inactivityLimitInput.value = data.inactivityLimit || 360;
-        scheduledTimeInput.value = data.scheduledCleanupTime || "23:00";
+        scheduledTimeInput.value = data.scheduledCleanupTime || "21:00";
 
         renderList(data.excludedDomains || []);
 

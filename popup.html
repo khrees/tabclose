@@ -26,6 +26,10 @@
         <!-- View Mode (Saved Settings Display) -->
         <div id="view-mode">
             <div class="section">
+                <button id="close-now-btn" class="primary-button">Close Inactive Tabs Now</button>
+            </div>
+
+            <div class="section">
                 <div class="view-header">
                     <h2>Current Settings</h2>
                     <button id="edit-btn" class="secondary-button">Edit Settings</button>
@@ -43,7 +47,7 @@
 
                 <div class="view-item" id="view-scheduled-item" style="display: none;">
                     <span class="view-label">Scheduled Time:</span>
-                    <span id="view-scheduled-text" class="view-value">23:00</span>
+                    <span id="view-scheduled-text" class="view-value">21:00</span>
                 </div>
 
                 <div class="view-item">
@@ -68,7 +72,7 @@
                     <div class="setting-item">
                         <label for="inactivity-limit">Close tabs inactive for</label>
                         <div class="input-with-unit">
-                            <input type="number" id="inactivity-limit" min="1" />
+                            <input type="number" id="inactivity-limit" min="1" max="10080" />
                             <span class="unit">minutes</span>
                         </div>
                         <p class="helper-text">Continuously monitors and closes tabs after this period</p>
