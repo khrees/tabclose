@@ -105,9 +105,10 @@ function switchTab(targetTab, skipSave = false) {
 
 tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
-        // skipSave = true: clicking tabs in edit mode changes the UI only.
-        // The new close mode is persisted when "Save Settings" is clicked.
-        switchTab(btn.dataset.tab, true);
+        switchTab(btn.dataset.tab);
+        // Apply the mode immediately so the background stops/starts the
+        // right alarm — no "Save" required to make the mode switch real.
+        chrome.runtime.sendMessage({ action: "updateCloseMode" });
     });
 });
 
@@ -149,6 +150,8 @@ function cancelEdit() {
 
     // Restore original settings
     chrome.storage.local.set(originalSettings, () => {
+        // Notify background so it reconfigures alarms for the restored mode
+        chrome.runtime.sendMessage({ action: "updateCloseMode" });
         // Reload form with original values
         loadSettings();
         showViewMode();
@@ -159,7 +162,22 @@ editBtn.addEventListener("click", showEditMode);
 saveBtn.addEventListener("click", saveSettings);
 cancelBtn.addEventListener("click", cancelEdit);
 document.getElementById("close-now-btn")?.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ action: "closeNow" });
+    const btn = document.getElementById("close-now-btn");
+    const originalText = btn.textContent;
+    btn.textContent = "Closing…";
+    btn.disabled = true;
+
+    chrome.runtime.sendMessage({ action: "closeNow" }, () => {
+        if (chrome.runtime.lastError) {
+            btn.textContent = "Error!";
+        } else {
+            btn.textContent = "Done!";
+        }
+        setTimeout(() => {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }, 1500);
+    });
 });
 
 // --- Excluded Domains --- //

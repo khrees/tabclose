@@ -134,7 +134,7 @@ button {
 }
 
 button:hover {
-    background-color: #000;
+    background-color: #1a1a1a;
     color: #fff;
 }
 
@@ -165,8 +165,8 @@ li span {
 
 .remove-button {
     background: transparent !important;
-    color: #666 !important;
-    border: 1px solid #333 !important;
+    color: #999 !important;
+    border: 1px solid #555 !important;
     border-radius: 4px !important;
     padding: 6px 12px !important;
     font-size: 12px !important;
@@ -293,7 +293,7 @@ li span {
 
 .tab-button {
     background: transparent;
-    color: #666;
+    color: #888;
     border: none;
     border-bottom: 2px solid transparent;
     padding: 12px 20px;
@@ -307,7 +307,7 @@ li span {
 
 .tab-button:hover {
     background: transparent;
-    color: #999;
+    color: #ccc;
 }
 
 .tab-button.active {
@@ -391,7 +391,7 @@ li span {
 .secondary-button {
     background: transparent;
     color: #fff;
-    border: 1px solid #444;
+    border: 1px solid #666;
     border-radius: 6px;
     padding: 8px 16px;
     font-size: 13px;

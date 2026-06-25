@@ -116,7 +116,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // and the manual "Close Now" button).
 function closeInactiveTabs(forceClose = false) {
     chrome.storage.local.get(
-        ["globalEnabled", "excludedDomains", "inactivityLimit"],
+        ["globalEnabled", "excludedDomains", "inactivityLimit", "closeMode"],
         (data) => {
             if (chrome.runtime.lastError) {
                 console.error("Error reading storage:", chrome.runtime.lastError);
@@ -126,6 +126,21 @@ function closeInactiveTabs(forceClose = false) {
             const globalEnabled = data.globalEnabled !== undefined ? data.globalEnabled : true;
             if (!globalEnabled) {
                 console.log("TabClose is disabled, skipping cleanup");
+                return;
+            }
+
+            const closeMode = data.closeMode || "inactivity";
+
+            // The periodic check (checkInactiveTabs alarm, forceClose=false) is only
+            // valid in inactivity mode.  A stale alarm that survived a mode switch
+            // or a service-worker restart must not close tabs in scheduled mode.
+            if (!forceClose && closeMode !== "inactivity") {
+                console.log(
+                    "Stale checkInactiveTabs alarm in",
+                    closeMode,
+                    "mode — clearing"
+                );
+                chrome.alarms.clear("checkInactiveTabs");
                 return;
             }
 
@@ -214,6 +229,8 @@ function updateAlarmsForMode() {
             console.log("TabClose disabled, clearing all alarms");
             chrome.alarms.clear("checkInactiveTabs");
             chrome.alarms.clear("scheduledCleanup");
+            chrome.action.setBadgeText({ text: "" });
+            chrome.action.setBadgeBackgroundColor({ color: "#666" });
             return;
         }
 
@@ -221,10 +238,14 @@ function updateAlarmsForMode() {
             chrome.alarms.clear("checkInactiveTabs");
             updateScheduledAlarm();
             console.log("Switched to scheduled mode");
+            chrome.action.setBadgeText({ text: "SCHED" });
+            chrome.action.setBadgeBackgroundColor({ color: "#4ade80" });
         } else {
             chrome.alarms.clear("scheduledCleanup");
             ensureAlarmExists();
             console.log("Switched to inactivity timer mode");
+            chrome.action.setBadgeText({ text: "ON" });
+            chrome.action.setBadgeBackgroundColor({ color: "#4ade80" });
         }
     });
 }
