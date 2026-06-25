@@ -15,6 +15,7 @@ const tabContents = document.querySelectorAll(".tab-content");
 
 // Store original values for cancel
 let originalSettings = {};
+let editingDomains = [];
 
 // --- Mode Switching --- //
 
@@ -25,27 +26,9 @@ function showViewMode() {
 }
 
 function showEditMode() {
-    // Seed originalSettings from current UI so cancelEdit is safe even if
-    // the async storage read hasn't completed yet. The callback refines it.
-    originalSettings = {
-        closeMode: document.querySelector(".tab-button.active")?.dataset.tab === "scheduled" ? "scheduled" : "inactivity",
-        inactivityLimit: parseInt(inactivityLimitInput.value, 10) || 360,
-        scheduledCleanupTime: scheduledTimeInput.value || "21:00",
-        excludedDomains: []
-    };
-
-    chrome.storage.local.get([
-        "closeMode",
-        "inactivityLimit",
-        "scheduledCleanupTime",
-        "excludedDomains"
-    ], (data) => {
-        originalSettings = {
-            closeMode: data.closeMode || "inactivity",
-            inactivityLimit: data.inactivityLimit || 360,
-            scheduledCleanupTime: data.scheduledCleanupTime || "21:00",
-            excludedDomains: [...(data.excludedDomains || [])]
-        };
+    chrome.storage.local.get("excludedDomains", (data) => {
+        editingDomains = [...(data.excludedDomains || [])];
+        renderList();
     });
 
     viewMode.style.display = "none";
@@ -77,7 +60,7 @@ globalEnabledCheckbox.addEventListener("change", updateGlobalState);
 
 // --- Tabs --- //
 
-function switchTab(targetTab, skipSave = false) {
+function switchTab(targetTab, skipSave = true) {
     // Update tab buttons
     tabButtons.forEach(btn => {
         if (btn.dataset.tab === targetTab) {
@@ -105,10 +88,7 @@ function switchTab(targetTab, skipSave = false) {
 
 tabButtons.forEach(btn => {
     btn.addEventListener("click", () => {
-        switchTab(btn.dataset.tab);
-        // Apply the mode immediately so the background stops/starts the
-        // right alarm — no "Save" required to make the mode switch real.
-        chrome.runtime.sendMessage({ action: "updateCloseMode" });
+        switchTab(btn.dataset.tab, true);
     });
 });
 
@@ -119,43 +99,29 @@ function saveSettings() {
     const inactivityLimit = parseInt(inactivityLimitInput.value, 10);
     const scheduledTime = scheduledTimeInput.value;
 
-    chrome.storage.local.get("excludedDomains", (data) => {
-        const settings = {
-            closeMode: closeMode,
-            inactivityLimit: inactivityLimit,
-            scheduledCleanupTime: scheduledTime,
-            excludedDomains: data.excludedDomains || []
-        };
+    const settings = {
+        closeMode: closeMode,
+        inactivityLimit: inactivityLimit,
+        scheduledCleanupTime: scheduledTime,
+        excludedDomains: editingDomains
+    };
 
-        chrome.storage.local.set(settings, () => {
-            // Notify background script
-            chrome.runtime.sendMessage({ action: "updateCloseMode" });
-            if (closeMode === "scheduled") {
-                chrome.runtime.sendMessage({ action: "updateScheduledAlarm" });
-            }
+    chrome.storage.local.set(settings, () => {
+        // Notify background script
+        chrome.runtime.sendMessage({ action: "updateCloseMode" });
+        if (closeMode === "scheduled") {
+            chrome.runtime.sendMessage({ action: "updateScheduledAlarm" });
+        }
 
-            // Show view mode
-            showViewMode();
-        });
+        // Show view mode
+        showViewMode();
     });
 }
 
 function cancelEdit() {
-    if (!originalSettings.closeMode) {
-        // originalSettings hasn't loaded from storage yet — just bail
-        loadSettings();
-        showViewMode();
-        return;
-    }
-
-    // Restore original settings
-    chrome.storage.local.set(originalSettings, () => {
-        // Notify background so it reconfigures alarms for the restored mode
-        chrome.runtime.sendMessage({ action: "updateCloseMode" });
-        // Reload form with original values
-        loadSettings();
-        showViewMode();
-    });
+    // Reload form with original values
+    loadSettings();
+    showViewMode();
 }
 
 editBtn.addEventListener("click", showEditMode);
@@ -202,6 +168,13 @@ function isValidDomain(domain) {
     // Check if empty
     if (!domain) return false;
 
+    // Support localhost
+    if (domain === "localhost") return true;
+
+    // IPv4 pattern: 4 numbers separated by dots (0-255 each)
+    const ipv4Pattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (ipv4Pattern.test(domain)) return true;
+
     // Domain regex pattern
     // Matches: example.com, sub.example.com, example.co.uk, etc.
     const domainPattern = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
@@ -219,9 +192,9 @@ function showDomainError(message) {
     }, 3000);
 }
 
-function renderList(domains) {
+function renderList() {
     domainList.innerHTML = "";
-    domains.forEach((domain, index) => {
+    editingDomains.forEach((domain, index) => {
         const li = document.createElement("li");
 
         const span = document.createElement("span");
@@ -231,10 +204,8 @@ function renderList(domains) {
         removeBtn.textContent = "Remove";
         removeBtn.className = "remove-button";
         removeBtn.onclick = () => {
-            domains.splice(index, 1);
-            chrome.storage.local.set({ excludedDomains: domains }, () => {
-                renderList(domains);
-            });
+            editingDomains.splice(index, 1);
+            renderList();
         };
 
         li.appendChild(span);
@@ -256,20 +227,14 @@ function addDomain() {
         return;
     }
 
-    chrome.storage.local.get("excludedDomains", (data) => {
-        const domains = data.excludedDomains || [];
+    if (editingDomains.includes(domain)) {
+        showDomainError("Domain already added");
+        return;
+    }
 
-        if (domains.includes(domain)) {
-            showDomainError("Domain already added");
-            return;
-        }
-
-        domains.push(domain);
-        chrome.storage.local.set({ excludedDomains: domains }, () => {
-            newDomainInput.value = "";
-            renderList(domains);
-        });
-    });
+    editingDomains.push(domain);
+    newDomainInput.value = "";
+    renderList();
 }
 
 addButton.onclick = addDomain;
@@ -361,7 +326,8 @@ function loadSettings() {
         inactivityLimitInput.value = data.inactivityLimit || 360;
         scheduledTimeInput.value = data.scheduledCleanupTime || "21:00";
 
-        renderList(data.excludedDomains || []);
+        editingDomains = [...(data.excludedDomains || [])];
+        renderList();
 
         // Update view display
         updateViewDisplay();

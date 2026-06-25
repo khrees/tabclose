@@ -384,8 +384,9 @@ li span {
 }
 
 .primary-button:hover {
-    background: #f0f0f0;
-    transform: translateY(-1px);
+    background: #000;
+    color: #fff;
+    border-color: #fff;
 }
 
 .secondary-button {
