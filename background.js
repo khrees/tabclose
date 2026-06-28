@@ -1,6 +1,9 @@
 // Default inactivity limit in minutes
 const DEFAULT_INACTIVITY_LIMIT_MINUTES = 360; // 6 hours
 const TAB_ACTIVE_PREFIX = "tabActive_";
+const CLOSED_TABS_PREFIX = "closedTab_";
+const CLOSED_TABS_LIST = "closedTabsList";
+const CLOSED_TABS_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
 
 // Helper to check if a URL should be excluded.
 // Uses proper domain-boundary matching to avoid false positives.
@@ -21,6 +24,100 @@ function shouldExclude(url, excludedDomains) {
     }
 }
 
+// Store a closed tab in localStorage
+function storeClosedTab(tabId, tabTitle, tabUrl, closeTime) {
+    if (!tabUrl) return; // Don't store tabs without URLs
+
+    const closedTab = {
+        id: tabId,
+        title: tabTitle || "New Tab",
+        url: tabUrl,
+        closedAt: closeTime || Date.now(),
+    };
+
+    const key = `${CLOSED_TABS_PREFIX}${tabId}_${closeTime || Date.now()}`;
+
+    // Store the closed tab
+    chrome.storage.local.set({ [key]: closedTab }, () => {
+        if (chrome.runtime.lastError) {
+            console.error("Error storing closed tab:", chrome.runtime.lastError);
+        }
+    });
+
+    // Update the list of closed tabs
+    chrome.storage.local.get([CLOSED_TABS_LIST], (data) => {
+        if (chrome.runtime.lastError) {
+            console.error("Error reading closed tabs list:", chrome.runtime.lastError);
+            return;
+        }
+
+        const closedTabsList = data[CLOSED_TABS_LIST] || [];
+        closedTabsList.push(key);
+
+        // Keep only the most recent 100 entries to avoid storage bloat
+        const truncatedList = closedTabsList.slice(-100);
+
+        chrome.storage.local.set({ [CLOSED_TABS_LIST]: truncatedList }, () => {
+            if (chrome.runtime.lastError) {
+                console.error("Error updating closed tabs list:", chrome.runtime.lastError);
+            }
+        });
+    });
+}
+
+// Clean up closed tabs older than 12 hours
+function cleanupOldClosedTabs() {
+    const now = Date.now();
+    const cutoffTime = now - CLOSED_TABS_TTL_MS;
+
+    chrome.storage.local.get([CLOSED_TABS_LIST], (data) => {
+        if (chrome.runtime.lastError) {
+            console.error("Error reading closed tabs list for cleanup:", chrome.runtime.lastError);
+            return;
+        }
+
+        const closedTabsList = data[CLOSED_TABS_LIST] || [];
+
+        if (closedTabsList.length === 0) {
+            return;
+        }
+
+        const keysToRemove = [];
+        const keysToKeep = [];
+
+        // Check each entry's timestamp
+        for (const key of closedTabsList) {
+            // Extract timestamp from key format: "closedTab_<tabId>_<timestamp>"
+            const parts = key.split("_");
+            const timestamp = parseInt(parts[parts.length - 1], 10);
+
+            if (isNaN(timestamp) || timestamp < cutoffTime) {
+                keysToRemove.push(key);
+            } else {
+                keysToKeep.push(key);
+            }
+        }
+
+        if (keysToRemove.length > 0) {
+            // Remove old entries from storage
+            chrome.storage.local.remove(keysToRemove, () => {
+                if (chrome.runtime.lastError) {
+                    console.error("Error removing old closed tabs:", chrome.runtime.lastError);
+                } else {
+                    console.log(`Cleaned up ${keysToRemove.length} old closed tab entries`);
+                }
+            });
+
+            // Update the list to keep only recent entries
+            chrome.storage.local.set({ [CLOSED_TABS_LIST]: keysToKeep }, () => {
+                if (chrome.runtime.lastError) {
+                    console.error("Error updating closed tabs list after cleanup:", chrome.runtime.lastError);
+                }
+            });
+        }
+    });
+}
+
 // Update the last active time for a given tab.
 // Uses individual per-tab keys in chrome.storage.session so there is
 // no read-modify-write race — each write is fully independent.
@@ -28,6 +125,19 @@ function updateTabLastActive(tabId) {
     chrome.storage.session.set({ [`${TAB_ACTIVE_PREFIX}${tabId}`]: Date.now() }, () => {
         if (chrome.runtime.lastError) {
             console.error("Error writing session storage:", chrome.runtime.lastError);
+        }
+    });
+}
+
+// Cache a tab's URL and title in session storage so we have it when it closes
+const TAB_INFO_PREFIX = "tabInfo_";
+function cacheTabInfo(tabId, title, url) {
+    if (!tabId || !url) return;
+    chrome.storage.session.set({
+        [`${TAB_INFO_PREFIX}${tabId}`]: { title: title || "New Tab", url: url }
+    }, () => {
+        if (chrome.runtime.lastError) {
+            console.error("Error caching tab info:", chrome.runtime.lastError);
         }
     });
 }
@@ -76,6 +186,15 @@ function updateScheduledAlarm() {
                 console.log("Scheduled cleanup: no time set");
             }
         });
+
+        // Schedule cleanup of old closed tabs (runs daily, 1 hour after scheduled cleanup)
+        chrome.alarms.clear("cleanupClosedTabs", () => {
+            chrome.alarms.create("cleanupClosedTabs", {
+                when: Date.now() + 60 * 60 * 1000, // 1 hour from now for first run
+                periodInMinutes: 24 * 60, // Repeat daily
+            });
+            console.log("Scheduled closed tabs cleanup (hourly checks)");
+        });
     });
 }
 
@@ -86,26 +205,53 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
     updateTabLastActive(activeInfo.tabId);
 });
 
-// When a new tab is created, initialize its timestamp
+// When a new tab is created, initialize its timestamp and cache its info
 chrome.tabs.onCreated.addListener((tab) => {
     if (tab.id) {
         updateTabLastActive(tab.id);
+        cacheTabInfo(tab.id, tab.title, tab.url);
     }
 });
 
-// When a tab is updated (e.g., reloaded or URL changes), update its timestamp
+// When a tab is updated (e.g., reloaded or URL changes), update its timestamp and cache info
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status === "complete" || changeInfo.audible !== undefined) {
         updateTabLastActive(tabId);
+        // Cache tab info when page finishes loading (title is finalized)
+        if (changeInfo.status === "complete") {
+            chrome.tabs.get(tabId, (tab) => {
+                if (!chrome.runtime.lastError && tab) {
+                    cacheTabInfo(tabId, tab.title, tab.url);
+                }
+            });
+        }
+    }
+    if (changeInfo.url || changeInfo.title) {
+        // URL or title changed mid-load — cache the latest info
+        chrome.tabs.get(tabId, (tab) => {
+            if (!chrome.runtime.lastError && tab) {
+                cacheTabInfo(tabId, tab.title, tab.url);
+            }
+        });
     }
 });
 
-// When a tab is closed, remove its session data
-chrome.tabs.onRemoved.addListener((tabId) => {
-    chrome.storage.session.remove(`${TAB_ACTIVE_PREFIX}${tabId}`, () => {
-        if (chrome.runtime.lastError) {
-            console.error("Error removing from session storage:", chrome.runtime.lastError);
+// When a tab is closed, remove its session data and store it in closed tabs
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    // Look up cached tab info from session storage
+    chrome.storage.session.get(`${TAB_INFO_PREFIX}${tabId}`, (sessionData) => {
+        const tabInfo = sessionData[`${TAB_INFO_PREFIX}${tabId}`];
+
+        if (tabInfo && tabInfo.url && !tabInfo.url.startsWith("chrome://") && !tabInfo.url.startsWith("about:")) {
+            storeClosedTab(tabId, tabInfo.title, tabInfo.url, Date.now());
         }
+
+        // Clean up session storage for this tab
+        chrome.storage.session.remove([`${TAB_ACTIVE_PREFIX}${tabId}`, `${TAB_INFO_PREFIX}${tabId}`], () => {
+            if (chrome.runtime.lastError) {
+                console.error("Error removing from session storage:", chrome.runtime.lastError);
+            }
+        });
     });
 });
 
@@ -229,6 +375,7 @@ function updateAlarmsForMode() {
             console.log("TabClose disabled, clearing all alarms");
             chrome.alarms.clear("checkInactiveTabs");
             chrome.alarms.clear("scheduledCleanup");
+            chrome.alarms.clear("cleanupClosedTabs");
             chrome.action.setBadgeText({ text: "" });
             chrome.action.setBadgeBackgroundColor({ color: "#666" });
             return;
@@ -243,6 +390,16 @@ function updateAlarmsForMode() {
         } else {
             chrome.alarms.clear("scheduledCleanup");
             ensureAlarmExists();
+            // Also ensure cleanup alarm exists for inactivity mode
+            chrome.alarms.get("cleanupClosedTabs", (alarm) => {
+                if (!alarm) {
+                    chrome.alarms.create("cleanupClosedTabs", {
+                        when: Date.now() + 60 * 60 * 1000, // 1 hour from now
+                        periodInMinutes: 24 * 60, // Repeat daily
+                    });
+                    console.log("Created cleanupClosedTabs alarm for inactivity mode");
+                }
+            });
             console.log("Switched to inactivity timer mode");
             chrome.action.setBadgeText({ text: "ON" });
             chrome.action.setBadgeBackgroundColor({ color: "#4ade80" });
@@ -258,6 +415,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     } else if (alarm.name === "scheduledCleanup") {
         console.log("Running scheduled cleanup");
         closeInactiveTabs(true);
+    } else if (alarm.name === "cleanupClosedTabs") {
+        console.log("Running cleanup of old closed tabs");
+        cleanupOldClosedTabs();
     }
 });
 
@@ -281,9 +441,86 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             closeInactiveTabs(true);
             sendResponse({ success: true });
             break;
+        case "getClosedTabs":
+            getClosedTabs(
+                (tabs) => sendResponse({ tabs: tabs }),
+                () => sendResponse({ error: "Failed to retrieve closed tabs" })
+            );
+            return true; // Keep channel open for async sendResponse
+        case "clearClosedTabs":
+            clearClosedTabs(() => sendResponse({ success: true }));
+            return true; // Keep channel open for async sendResponse
     }
     return true; // Keep channel open for async sendResponse
 });
+
+// Retrieve all closed tabs stored in localStorage
+function getClosedTabs(successCallback, errorCallback) {
+    chrome.storage.local.get(null, (data) => {
+        if (chrome.runtime.lastError) {
+            console.error("Error reading storage:", chrome.runtime.lastError);
+            errorCallback(chrome.runtime.lastError);
+            return;
+        }
+
+        const now = Date.now();
+        const cutoffTime = now - CLOSED_TABS_TTL_MS;
+        const closedTabs = [];
+
+        // Get the list of closed tab keys
+        const closedTabsList = data[CLOSED_TABS_LIST] || [];
+
+        for (const key of closedTabsList) {
+            // Extract timestamp from key format: "closedTab_<tabId>_<timestamp>"
+            const parts = key.split("_");
+            const timestamp = parseInt(parts[parts.length - 1], 10);
+
+            // Skip old entries (shouldn't happen if cleanup is working, but just in case)
+            if (isNaN(timestamp) || timestamp < cutoffTime) {
+                continue;
+            }
+
+            // Get the closed tab data
+            const closedTab = data[key];
+            if (closedTab) {
+                closedTabs.push(closedTab);
+            }
+        }
+
+        // Sort by closedAt time (most recent first)
+        closedTabs.sort((a, b) => b.closedAt - a.closedAt);
+
+        successCallback(closedTabs);
+    });
+}
+
+// Clear all closed tabs from localStorage
+function clearClosedTabs(callback) {
+    chrome.storage.local.get([CLOSED_TABS_LIST], (data) => {
+        if (chrome.runtime.lastError) {
+            console.error("Error reading closed tabs list:", chrome.runtime.lastError);
+            callback();
+            return;
+        }
+
+        const closedTabsList = data[CLOSED_TABS_LIST] || [];
+
+        if (closedTabsList.length === 0) {
+            callback();
+            return;
+        }
+
+        // Remove all closed tab entries
+        chrome.storage.local.remove([...closedTabsList, CLOSED_TABS_LIST], () => {
+            if (chrome.runtime.lastError) {
+                console.error("Error clearing closed tabs:", chrome.runtime.lastError);
+            } else {
+                console.log(`Cleared ${closedTabsList.length} closed tab entries`);
+            }
+            callback();
+        });
+    });
+}
 
 // --- Startup & Install ---
 
@@ -291,6 +528,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.runtime.onStartup.addListener(() => {
     console.log("Chrome started, updating alarms");
     updateAlarmsForMode();
+    // Clean up old closed tabs on startup
+    cleanupOldClosedTabs();
 });
 
 // On install or update (details.reason is "install" or "update")
@@ -319,6 +558,7 @@ chrome.runtime.onInstalled.addListener((details) => {
                 "spotify.com",
             ];
         }
+        if (data.closedTabsList === undefined) updates.closedTabsList = [];
 
         if (Object.keys(updates).length > 0) {
             chrome.storage.local.set(updates, () => {
@@ -393,19 +633,23 @@ function initializeSessionData() {
             }
 
             const now = Date.now();
-            const updates = {};
+            const sessionUpdates = {};
             for (const tab of tabs) {
                 if (tab.id && !trackedTabIds.has(tab.id)) {
-                    updates[`${TAB_ACTIVE_PREFIX}${tab.id}`] = now;
+                    sessionUpdates[`${TAB_ACTIVE_PREFIX}${tab.id}`] = now;
+                    // Also cache tab info for untracked tabs
+                    if (tab.url) {
+                        sessionUpdates[`${TAB_INFO_PREFIX}${tab.id}`] = { title: tab.title || "New Tab", url: tab.url };
+                    }
                 }
             }
 
-            if (Object.keys(updates).length > 0) {
-                chrome.storage.session.set(updates, () => {
+            if (Object.keys(sessionUpdates).length > 0) {
+                chrome.storage.session.set(sessionUpdates, () => {
                     if (chrome.runtime.lastError) {
                         console.error("Error initializing session storage:", chrome.runtime.lastError);
                     } else {
-                        console.log(`Initialized ${Object.keys(updates).length} untracked tabs`);
+                        console.log(`Initialized ${Object.keys(sessionUpdates).length} untracked tabs`);
                     }
                 });
             }

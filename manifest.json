@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "Automatically close inactive tabs to keep your browser clean and fast. Set inactivity timers or schedule daily cleanups.",
     "author": "Your Name",
-    "permissions": ["tabs", "alarms", "storage"],
+    "permissions": ["tabs", "alarms", "storage", "sessions"],
     "background": {
         "service_worker": "background.js"
     },

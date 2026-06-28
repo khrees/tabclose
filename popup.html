@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html data-theme="dark">
     <head>
         <title>TabClose Settings</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
         <link rel="stylesheet" href="style.css" />
     </head>
     <body>
@@ -10,12 +11,12 @@
                 <img src="favicon_io/logo.svg" alt="TabClose" class="header-logo">
                 <h1>TabClose</h1>
             </div>
-            <a href="welcome.html" target="_blank" class="info-link">About</a>
+            <a href="welcome.html" target="_blank" role="button" class="secondary outline" style="padding: 6px 12px; font-size: 13px;">About</a>
         </div>
 
-        <div class="section">
+        <div class="card-sm">
             <div class="toggle-container">
-                <span class="toggle-label">TabClose is <span id="status-text">ON</span></span>
+                <span class="toggle-label">TabClose is <span id="status-text" class="status-badge">ON</span></span>
                 <label class="toggle-switch">
                     <input type="checkbox" id="global-enabled" checked />
                     <span class="toggle-slider"></span>
@@ -25,33 +26,33 @@
 
         <!-- View Mode (Saved Settings Display) -->
         <div id="view-mode">
-            <div class="section">
-                <button id="close-now-btn" class="primary-button">Close Inactive Tabs Now</button>
+            <div class="card-sm">
+                <button id="close-now-btn" class="primary">Close Inactive Tabs Now</button>
             </div>
 
-            <div class="section">
+            <div class="card">
                 <div class="view-header">
                     <h2>Current Settings</h2>
-                    <button id="edit-btn" class="secondary-button">Edit Settings</button>
+                    <button id="edit-btn" class="secondary outline" style="padding: 6px 12px; font-size: 13px;">Edit Settings</button>
                 </div>
 
                 <div class="view-item">
-                    <span class="view-label">Mode:</span>
+                    <span class="view-label">Mode</span>
                     <span id="view-mode-text" class="view-value">Inactivity Timer</span>
                 </div>
 
                 <div class="view-item" id="view-inactivity-item">
-                    <span class="view-label">Inactivity Timer:</span>
-                    <span id="view-inactivity-text" class="view-value">360 minutes</span>
+                    <span class="view-label">Inactivity Timer</span>
+                    <span id="view-inactivity-text" class="view-value">6 hours</span>
                 </div>
 
                 <div class="view-item" id="view-scheduled-item" style="display: none;">
-                    <span class="view-label">Scheduled Time:</span>
+                    <span class="view-label">Scheduled Time</span>
                     <span id="view-scheduled-text" class="view-value">21:00</span>
                 </div>
 
                 <div class="view-item">
-                    <span class="view-label">Excluded Domains:</span>
+                    <span class="view-label">Excluded Domains</span>
                     <span id="view-domains-text" class="view-value">6 domains</span>
                 </div>
             </div>
@@ -59,7 +60,7 @@
 
         <!-- Edit Mode (Settings Form) -->
         <div id="edit-mode" style="display: none;">
-            <div class="section">
+            <div class="card">
                 <h2>Close Mode</h2>
                 <p class="helper-text">Choose when to close inactive tabs</p>
 
@@ -69,39 +70,51 @@
                 </div>
 
                 <div class="tab-content active" id="inactivity-tab">
-                    <div class="setting-item">
-                        <label for="inactivity-limit">Close tabs inactive for</label>
-                        <div class="input-with-unit">
-                            <input type="number" id="inactivity-limit" min="1" max="10080" />
-                            <span class="unit">minutes</span>
+                    <label for="inactivity-limit">Close tabs inactive for
+                        <div class="input-with-unit" style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                            <input type="number" id="inactivity-limit" min="1" max="10080" style="width: 100px; margin-bottom: 0;" />
+                            <span style="color: var(--pico-muted-color); font-size: 14px;">minutes</span>
                         </div>
-                        <p class="helper-text">Continuously monitors and closes tabs after this period</p>
-                    </div>
+                    </label>
+                    <p class="helper-text">Continuously monitors and closes tabs after this period</p>
                 </div>
 
                 <div class="tab-content" id="scheduled-tab">
-                    <div class="setting-item">
-                        <label for="scheduled-time">Close all inactive tabs daily at</label>
-                        <input type="time" id="scheduled-time" />
-                        <p class="helper-text">Runs once per day at the specified time</p>
-                    </div>
+                    <label for="scheduled-time">Close all inactive tabs daily at
+                        <input type="time" id="scheduled-time" style="margin-top: 4px;" />
+                    </label>
+                    <p class="helper-text">Runs once per day at the specified time</p>
                 </div>
             </div>
 
-            <div class="section">
+            <div class="card">
                 <h2>Excluded Domains</h2>
                 <p class="helper-text">Tabs from these domains will never be closed</p>
                 <ul id="domain-list"></ul>
 
-                <div class="input-group">
-                    <input type="text" id="new-domain" placeholder="e.g. google.com or mail.google.com" />
-                    <button id="add-domain">Add</button>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="new-domain" placeholder="e.g. google.com" style="margin-bottom: 0;" />
+                    <button id="add-domain" style="width: auto; flex-shrink: 0;">Add</button>
                 </div>
             </div>
 
-            <div class="section action-section">
-                <button id="save-btn" class="primary-button">Save Settings</button>
-                <button id="cancel-btn" class="secondary-button">Cancel</button>
+            <div class="action-row">
+                <button id="save-btn" class="primary">Save Settings</button>
+                <button id="cancel-btn" class="secondary">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Closed Tabs Section -->
+        <div class="card-sm">
+            <div class="closed-tabs-header">
+                <h2>Recently Closed</h2>
+                <div>
+                    <span id="closed-tabs-expiry" class="helper-text mr-2"></span>
+                    <button id="clear-closed-tabs-btn" class="secondary outline" style="padding: 4px 8px; font-size: 12px; width: auto; margin: 0;">Clear</button>
+                </div>
+            </div>
+            <div id="closed-tabs-list" class="closed-tabs-list empty">
+                No closed tabs yet
             </div>
         </div>
 

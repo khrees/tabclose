@@ -40,7 +40,7 @@ function showEditMode() {
 function updateGlobalState() {
     const enabled = globalEnabledCheckbox.checked;
     statusText.textContent = enabled ? "ON" : "OFF";
-    statusText.className = enabled ? "" : "off";
+    statusText.classList.toggle("off", !enabled);
 
     if (enabled) {
         viewMode.style.opacity = "1";
@@ -198,11 +198,13 @@ function renderList() {
         const li = document.createElement("li");
 
         const span = document.createElement("span");
+        span.className = "domain-name";
         span.textContent = domain;
 
         const removeBtn = document.createElement("button");
         removeBtn.textContent = "Remove";
-        removeBtn.className = "remove-button";
+        removeBtn.className = "secondary outline";
+        removeBtn.style.cssText = "padding: 4px 8px; font-size: 12px; width: auto; margin: 0;";
         removeBtn.onclick = () => {
             editingDomains.splice(index, 1);
             renderList();
@@ -307,7 +309,7 @@ function loadSettings() {
         const globalEnabled = data.globalEnabled !== undefined ? data.globalEnabled : true;
         globalEnabledCheckbox.checked = globalEnabled;
         statusText.textContent = globalEnabled ? "ON" : "OFF";
-        statusText.className = globalEnabled ? "" : "off";
+        statusText.classList.toggle("off", !globalEnabled);
 
         if (globalEnabled) {
             viewMode.style.opacity = "1";
@@ -334,9 +336,134 @@ function loadSettings() {
     });
 }
 
+// --- Closed Tabs Storage --- //
+
+function formatTimeAgo(timestamp) {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+
+    if (minutes < 1) return "Just now";
+    if (minutes === 1) return "1 min ago";
+    if (hours < 1) return `${minutes} min ago`;
+    if (hours === 1) return "1 hour ago";
+    return `${hours} hours ago`;
+}
+
+function formatTimeRemaining(timestamp) {
+    const remaining = (timestamp + 12 * 60 * 60 * 1000) - Date.now();
+    if (remaining <= 0) return "Expiring soon";
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) {
+        return `${hours}h ${minutes}m remaining`;
+    }
+    return `${minutes}m remaining`;
+}
+
+function loadClosedTabs() {
+    chrome.runtime.sendMessage({ action: "getClosedTabs" }, (response) => {
+        if (chrome.runtime.lastError) {
+            console.error("Error getting closed tabs:", chrome.runtime.lastError);
+            return;
+        }
+
+        const closedTabsList = document.getElementById("closed-tabs-list");
+        const clearBtn = document.getElementById("clear-closed-tabs-btn");
+        const expiryLabel = document.getElementById("closed-tabs-expiry");
+
+        if (!response || !response.tabs || response.tabs.length === 0) {
+            closedTabsList.textContent = "No closed tabs yet";
+            closedTabsList.classList.add("empty");
+            clearBtn.disabled = true;
+            expiryLabel.textContent = "";
+            return;
+        }
+
+        closedTabsList.classList.remove("empty");
+        clearBtn.disabled = false;
+
+        // Show earliest remaining time
+        const earliest = response.tabs[response.tabs.length - 1].closedAt;
+        expiryLabel.textContent = `~${formatTimeRemaining(earliest)}`;
+
+        closedTabsList.innerHTML = "";
+        // Show only the 10 most recent
+        const recentTabs = response.tabs.slice(0, 10);
+
+        for (const tab of recentTabs) {
+            const div = document.createElement("div");
+            div.className = "closed-tab-item";
+
+            const titleLink = document.createElement("a");
+            titleLink.className = "closed-tab-title";
+            titleLink.href = tab.url;
+            titleLink.textContent = tab.title || tab.url;
+            titleLink.title = tab.url;
+            titleLink.addEventListener("click", (e) => {
+                e.preventDefault();
+                chrome.tabs.create({ url: tab.url, active: false });
+            });
+
+            const urlSpan = document.createElement("span");
+            urlSpan.className = "closed-tab-url";
+            urlSpan.textContent = tab.url;
+
+            const metaDiv = document.createElement("div");
+            metaDiv.className = "closed-tab-meta";
+
+            const timeSpan = document.createElement("span");
+            timeSpan.className = "closed-tab-time";
+            timeSpan.textContent = formatTimeAgo(tab.closedAt);
+
+            const restoreBtn = document.createElement("button");
+            restoreBtn.textContent = "Restore";
+            restoreBtn.style.cssText = "padding: 4px 8px; font-size: 12px; width: auto; margin: 0;";
+            restoreBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                chrome.tabs.create({ url: tab.url, active: true });
+            });
+
+            metaDiv.appendChild(timeSpan);
+            metaDiv.appendChild(restoreBtn);
+            div.appendChild(titleLink);
+            div.appendChild(urlSpan);
+            div.appendChild(metaDiv);
+            closedTabsList.appendChild(div);
+        }
+    });
+}
+
+// Clear all closed tabs
+document.getElementById("clear-closed-tabs-btn")?.addEventListener("click", () => {
+    const btn = document.getElementById("clear-closed-tabs-btn");
+    const originalText = btn.textContent;
+    btn.textContent = "Clearing…";
+    btn.disabled = true;
+
+    chrome.runtime.sendMessage({ action: "clearClosedTabs" }, () => {
+        if (chrome.runtime.lastError) {
+            console.error("Error clearing closed tabs:", chrome.runtime.lastError);
+            btn.textContent = "Error!";
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }, 1500);
+        } else {
+            loadClosedTabs();
+            btn.textContent = "Cleared!";
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 1500);
+        }
+    });
+});
+
 // --- Initialization --- //
 
 document.addEventListener("DOMContentLoaded", () => {
     loadSettings();
     showViewMode();
+    loadClosedTabs();
 });
